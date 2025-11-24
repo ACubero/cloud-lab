@@ -33,49 +33,41 @@ Este repositorio documenta el desafío técnico de desplegar un entorno de produ
 * Gestión de puertos (22 SSH, 80 HTTP, 9443 HTTPS).
 * Transferencia segura de archivos mediante SFTP (WinSCP).
 
-## 🐛 "War Story": El desafío de la API
-Durante la implementación, el entorno de Portainer fallaba al conectar con el socket de Docker local. Tras analizar los logs del contenedor, identifiqué un *breaking change* en la versión 29 de Docker Engine.
+# 🏆 Challenge DevOps: Despliegue de Infraestructura Cloud & Contenedores
 
-**Solución implementada:**
-Modificación del `daemon.json` para mantener retrocompatibilidad:
-```json
-{
-  "min-api-version": "1.24"
-}
+Este documento recopila el proceso completo de despliegue, la resolución de problemas técnicos y la documentación final del proyecto realizado en Hetzner Cloud con Docker y Portainer.
 
+---
 
+## 📘 PARTE 1: La Guía "Happy Path" (El Camino Ideal)
+*Pasos exactos para replicar este despliegue desde cero sin errores.*
 
-📘 Historia 1: La Guía del Éxito (El Camino Ideal)
-Si tuviera que repetir este despliegue mañana en 5 minutos, estos son los pasos exactos sin dar vueltas:
+### 1. Aprovisionamiento y Acceso
+* **Crear VPS:** Hetzner Cloud, imagen Ubuntu 24.04 (Arquitectura ARM64).
+* **Firewall Cloud:** Crear un firewall en el panel de Hetzner permitiendo entrada (Inbound) en **TCP: 22 (SSH), 80 (HTTP) y 9443 (HTTPS)**. **IMPORTANTE:** Aplicar el firewall al servidor.
+* **Acceso:** Conectar siempre vía PowerShell o Terminal (`ssh root@TU_IP`) para evitar errores de codificación de teclado de la consola web.
 
-1. Aprovisionamiento y Acceso
-Crear VPS: Usar Hetzner Cloud con imagen Ubuntu 24.04 (Arquitectura ARM64).
+### 2. Preparación del Entorno
+Actualizar el sistema y aplicar el parche preventivo para la compatibilidad de Docker v29+.
 
-Firewall Cloud: Antes de nada, crear un firewall en el panel web permitiendo entrada (Inbound) en los puertos 22 (SSH), 80 (HTTP) y 9443 (HTTPS) y, lo más importante, aplicarlo al servidor.
-
-Acceso: Conectar siempre vía PowerShell o Terminal (ssh root@TU_IP) para evitar problemas de codificación de teclado de la consola web.
-
-2. Preparación del Entorno
-Actualizar el sistema y aplicar el parche preventivo para la compatibilidad de Docker:
-# Actualizar sistema
+```bash
+# 1. Actualizar sistema
 apt update && apt upgrade -y
 
-# Instalar Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
+# 2. Instalar Docker
+curl -fsSL [https://get.docker.com](https://get.docker.com) -o get-docker.sh
 sh get-docker.sh
 
-# CONFIGURACIÓN CRÍTICA (Parche compatibilidad Docker 29)
+# 3. CONFIGURACIÓN CRÍTICA (Parche compatibilidad API)
+# Esto soluciona el error "Failed loading environment" en Docker 29+
 sudo tee /etc/docker/daemon.json <<EOF
 {
   "min-api-version": "1.24"
 }
 EOF
 
-# Reiniciar Docker para aplicar cambios
+# 4. Reiniciar Docker para aplicar cambios
 systemctl restart docker
-
-3. Despliegue de Portainer
-Instalar el orquestador con permisos suficientes para manejar el socket de Docker en Ubuntu 24.04:
 docker volume create portainer_data
 
 docker run -d -p 8000:8000 -p 9443:9443 \
@@ -86,23 +78,17 @@ docker run -d -p 8000:8000 -p 9443:9443 \
   -v portainer_data:/data \
   portainer/portainer-ce:latest
 
-4. Despliegue de la Aplicación
-Subida de archivos: Usar WinSCP (protocolo SFTP) para subir el index.html a la carpeta del usuario (/home/usuario/web).
-
-Despliegue: En Portainer, crear un Stack apuntando a esa ruta:
-docker volume create portainer_data
-
-docker run -d -p 8000:8000 -p 9443:9443 \
-  --name portainer \
-  --restart=always \
-  --privileged \
-  -v /var/run/docker.sock:/var/run/docker.sock:Z \
-  -v portainer_data:/data \
-  portainer/portainer-ce:latest
+version: '3'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - /home/usuario/web:/usr/share/nginx/html
+    restart: always
 
 
-📙 Historia 2: Diario de Guerra (Troubleshooting)
-Esta es la bitácora técnica de los obstáculos encontrados y cómo se solucionó cada uno mediante ingeniería y diagnóstico.
 Problema,Síntoma,Solución Técnica Aplicada
 Named Pipes en Windows,Docker Desktop en Windows fallaba al conectar con Portainer usando rutas de Linux (/var/run/docker.sock).,Migración a Linux: Se decidió mover la infraestructura a un VPS nativo Linux para evitar capas de emulación y problemas de sockets propietarios.
 Inyección de caracteres,"Al pegar comandos en la consola VNC del navegador, los caracteres : y / se cambiaban por ñ o -.",Cambio a SSH: Se configuró el acceso remoto vía SSH (PowerShell) para utilizar la codificación de teclado local correcta.
