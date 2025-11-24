@@ -7,6 +7,5 @@ services:
     ports:
       - "80:80"
     volumes:
-      # CAMBIO IMPORTANTE: Usamos la ruta de tu usuario 'lloko'
-      - /home/lloko/web-challenge:/usr/share/nginx/html
+      - /home/<user>/web-challenge:/usr/share/nginx/html
     restart: always
