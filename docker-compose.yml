@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  web:
+    image: nginx:alpine
+    container_name: portfolio-final
+    ports:
+      - "80:80"
+    volumes:
+      # CAMBIO IMPORTANTE: Usamos la ruta de tu usuario 'lloko'
+      - /home/lloko/web-challenge:/usr/share/nginx/html
+    restart: always
