@@ -42,3 +42,72 @@ Modificación del `daemon.json` para mantener retrocompatibilidad:
 {
   "min-api-version": "1.24"
 }
+
+
+
+📘 Historia 1: La Guía del Éxito (El Camino Ideal)
+Si tuviera que repetir este despliegue mañana en 5 minutos, estos son los pasos exactos sin dar vueltas:
+
+1. Aprovisionamiento y Acceso
+Crear VPS: Usar Hetzner Cloud con imagen Ubuntu 24.04 (Arquitectura ARM64).
+
+Firewall Cloud: Antes de nada, crear un firewall en el panel web permitiendo entrada (Inbound) en los puertos 22 (SSH), 80 (HTTP) y 9443 (HTTPS) y, lo más importante, aplicarlo al servidor.
+
+Acceso: Conectar siempre vía PowerShell o Terminal (ssh root@TU_IP) para evitar problemas de codificación de teclado de la consola web.
+
+2. Preparación del Entorno
+Actualizar el sistema y aplicar el parche preventivo para la compatibilidad de Docker:
+# Actualizar sistema
+apt update && apt upgrade -y
+
+# Instalar Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+
+# CONFIGURACIÓN CRÍTICA (Parche compatibilidad Docker 29)
+sudo tee /etc/docker/daemon.json <<EOF
+{
+  "min-api-version": "1.24"
+}
+EOF
+
+# Reiniciar Docker para aplicar cambios
+systemctl restart docker
+
+3. Despliegue de Portainer
+Instalar el orquestador con permisos suficientes para manejar el socket de Docker en Ubuntu 24.04:
+docker volume create portainer_data
+
+docker run -d -p 8000:8000 -p 9443:9443 \
+  --name portainer \
+  --restart=always \
+  --privileged \
+  -v /var/run/docker.sock:/var/run/docker.sock:Z \
+  -v portainer_data:/data \
+  portainer/portainer-ce:latest
+
+4. Despliegue de la Aplicación
+Subida de archivos: Usar WinSCP (protocolo SFTP) para subir el index.html a la carpeta del usuario (/home/usuario/web).
+
+Despliegue: En Portainer, crear un Stack apuntando a esa ruta:
+docker volume create portainer_data
+
+docker run -d -p 8000:8000 -p 9443:9443 \
+  --name portainer \
+  --restart=always \
+  --privileged \
+  -v /var/run/docker.sock:/var/run/docker.sock:Z \
+  -v portainer_data:/data \
+  portainer/portainer-ce:latest
+
+
+📙 Historia 2: Diario de Guerra (Troubleshooting)
+Esta es la bitácora técnica de los obstáculos encontrados y cómo se solucionó cada uno mediante ingeniería y diagnóstico.
+Problema,Síntoma,Solución Técnica Aplicada
+Named Pipes en Windows,Docker Desktop en Windows fallaba al conectar con Portainer usando rutas de Linux (/var/run/docker.sock).,Migración a Linux: Se decidió mover la infraestructura a un VPS nativo Linux para evitar capas de emulación y problemas de sockets propietarios.
+Inyección de caracteres,"Al pegar comandos en la consola VNC del navegador, los caracteres : y / se cambiaban por ñ o -.",Cambio a SSH: Se configuró el acceso remoto vía SSH (PowerShell) para utilizar la codificación de teclado local correcta.
+Bloqueo de Red (Capa 1),Test-NetConnection fallaba (Timeout) en el puerto 22.,Hetzner Firewall: Se detectó que el firewall de nube no estaba aplicado al recurso (servidor). Se vinculó correctamente el firewall al VPS.
+Bloqueo de Red (Capa 2),WinSCP rechazaba la conexión tras abrir el firewall de nube.,UFW (Linux Firewall): El firewall interno del SO bloqueaba SSH. Se ejecutó ufw allow 22/tcp desde la consola de emergencia.
+Servicio SSH Muerto,El puerto estaba abierto pero nadie respondía (Connection refused).,Systemd: Se diagnosticó el servicio como inactive (dead). Se forzó el arranque con systemctl start ssh y se habilitó PermitRootLogin en sshd_config.
+AppArmor / Socket,"Portainer mostraba el entorno local como ""Down"" o ""Unreachable"" a pesar de estar instalado.",Privilegios: Se reinstaló el contenedor con las banderas --privileged y el sufijo :Z en el volumen del socket para saltar las restricciones de SELinux/AppArmor.
+Incompatibilidad API,Error Failed loading environment persistente en arquitectura ARM64.,Downgrade API: Se identificó que Docker v29 rompe compatibilidad con Portainer v2.21. Se forzó min-api-version: 1.24 en /etc/docker/daemon.json.
